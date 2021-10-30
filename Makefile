@@ -16,8 +16,8 @@ FREERTOS_HEAP_DIR	:= $(FREERTOS_DIR)/portable/MemMang
 DEFS		+= -DSTM32F1
 
 # Redefine to the name of your project.
-BINARY				= myproject
-SOURCE_DIR			= myproject
+BINARY				= audec
+SOURCE_DIR			= audec
 OBJ_DIR				=  obj
 FREERTOS_OBJ_DIR	=  $(OBJ_DIR)/freertos
 BINARY_DIR			?= bin
