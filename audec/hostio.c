@@ -5,15 +5,18 @@
  * is full.
  */
 
+#include <string.h>
+
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
 
 #include "hostio.h"
 
-static void request_data(const usart_ctx* usart);
+static void init_protocol(const usart_ctx* usart);
 static void send_str(const char* str, const usart_ctx* usart);
 static void send_char(char data, const usart_ctx* usart);
+static bool recv_str(char* buf, unsigned int size, const usart_ctx* usart, TickType_t timeout);
 
 void hostio_setup(const usart_ctx* usart) {
 	rcc_periph_clock_enable(usart->rcc_gpio);
@@ -52,21 +55,75 @@ static void send_char(char data, const usart_ctx* usart) {
 	usart_send(usart->number, data);
 }
 
-static void request_data(const usart_ctx* usart) {
-	bool response_recv = false;
+/**
+ * Receives a string in the specified timeout period or until '\r\n' is received.
+ *
+ * @param buf[out] The buffer to store the string into. @note '\r\n' will be stripped.
+ * @param size The size of the buffer.
+ * @param usart The USART context to receive data from.
+ * @param timeout The amount of time to wait before returning. If set to 0 then the function
+ * waits indefinetly.
+ *
+ * @return Whether a valid string was received within the timeout period.
+ */
+static bool recv_str(char* buf, unsigned int size, const usart_ctx* usart, TickType_t timeout) {
+	TickType_t ticks_old = xTaskGetTickCount();
+	bool timed_out = false;
+	bool received_crlf = false;
 
-	while (!response_recv) {
-		send_str("bfsz\r\n", usart);
-		vTaskDelay(pdMS_TO_TICKS(2000));
+	unsigned int i = 0;
+
+	while (i < size && !received_crlf) {
+		while ( usart_get_flag(usart->number, USART_SR_RXNE) == 0 ) {
+			taskYIELD();
+
+			timed_out = timeout > 0 && xTaskGetTickCount() - ticks_old > timeout;
+			if (timed_out) {
+				break;
+			}
+		}
+
+		buf[i] = usart_recv(usart->number);
+
+		if (i > 0) {
+			received_crlf = buf[i-1] == '\r' && buf[i] == '\n';
+			if (received_crlf) {
+				buf[i-1] = '\0';
+			}
+		}
+
+		i++;
 	}
 
+	return received_crlf;
+}
+
+static void init_protocol(const usart_ctx* usart) {
+	bool valid_response = false;
+	char recv[16];
+
+	while (!valid_response) {
+		send_str("bfsz\r\n", usart);
+
+		if (recv_str(recv, 16, usart, 2000)) {
+			valid_response = strcmp(recv, "info") == 0;
+
+			if (valid_response) {
+				send_str("good\r\n", usart);
+			} else {
+				send_str("bad\r\n", usart);
+			}
+		}
+	}
 }
 
 void hostio_task(void* args) {
 	usart_ctx* usart = (usart_ctx*)args;
 
 	for (;;) {
-		request_data(usart);	
+		init_protocol(usart);
+		
+		while(1);	
 	}
 }
 
