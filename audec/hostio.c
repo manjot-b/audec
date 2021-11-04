@@ -5,6 +5,7 @@
  * is full.
  */
 
+#include <stdint.h>
 #include <string.h>
 
 #include "FreeRTOS.h"
@@ -15,8 +16,12 @@
 
 static void init_protocol(const usart_ctx* usart);
 static void send_str(const char* str, const usart_ctx* usart);
+static void send_data(const char* data, uint32_t size, const usart_ctx* usart);
 static void send_char(char data, const usart_ctx* usart);
 static bool recv_str(char* buf, unsigned int size, const usart_ctx* usart, TickType_t timeout);
+
+#define IN_BUF_SIZE 256
+static char in_buf[IN_BUF_SIZE];
 
 void hostio_setup(const usart_ctx* usart) {
 	rcc_periph_clock_enable(usart->rcc_gpio);
@@ -44,6 +49,12 @@ void hostio_setup(const usart_ctx* usart) {
 static void send_str(const char* str, const usart_ctx* usart) {
 	for(; *str; ++str) {
 		send_char(*str, usart);
+	}
+}
+
+static void send_data(const char* data, uint32_t size, const usart_ctx* usart) {
+	for(uint32_t i = 0; i < size; i++) {
+		send_char(data[i], usart);
 	}
 }
 
@@ -102,8 +113,12 @@ static void init_protocol(const usart_ctx* usart) {
 	bool valid_response = false;
 	char recv[16];
 
+	char buf_sz[] = {IN_BUF_SIZE >> 8, IN_BUF_SIZE & 0xFF};
+
 	while (!valid_response) {
+		
 		send_str("bfsz\r\n", usart);
+		send_data(buf_sz, 2, usart);
 
 		if (recv_str(recv, 16, usart, 2000)) {
 			valid_response = strcmp(recv, "info") == 0;
