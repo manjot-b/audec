@@ -14,11 +14,12 @@
 
 #include "hostio.h"
 
-static void init_protocol(const usart_ctx* usart);
+static bool init_protocol(info_packet* info, const usart_ctx* usart);
 static void send_str(const char* str, const usart_ctx* usart);
 static void send_data(const char* data, uint32_t size, const usart_ctx* usart);
 static void send_char(char data, const usart_ctx* usart);
 static bool recv_str(char* buf, unsigned int size, const usart_ctx* usart, TickType_t timeout);
+static unsigned int recv_data(char* buf, unsigned int size, const usart_ctx* usart, TickType_t timeout);
 
 #define IN_BUF_SIZE 256
 static char in_buf[IN_BUF_SIZE];
@@ -109,34 +110,80 @@ static bool recv_str(char* buf, unsigned int size, const usart_ctx* usart, TickT
 	return received_crlf;
 }
 
-static void init_protocol(const usart_ctx* usart) {
+/**
+ * Receives a certain number of bytes in the specified timeout period.
+ *
+ * @param buf[out] The buffer to store the data into.
+ * @param size The number of bytes to receive.
+ * @param usart The USART context to receive data from.
+ * @param timeout The amount of time to wait before returning. If set to 0 then the function
+ * waits indefinetly.
+ *
+ * @return The number of bytes received within the timeout period.
+ */
+static unsigned int recv_data(char* buf, unsigned int size, const usart_ctx* usart, TickType_t timeout) {
+	TickType_t ticks_old = xTaskGetTickCount();
+	bool timed_out = false;
+
+	unsigned int bytes_read = 0;
+
+	while (bytes_read < size) {
+		while ( usart_get_flag(usart->number, USART_SR_RXNE) == 0 ) {
+			taskYIELD();
+
+			timed_out = timeout > 0 && xTaskGetTickCount() - ticks_old > timeout;
+			if (timed_out) {
+				break;
+			}
+		}
+
+		buf[bytes_read] = usart_recv(usart->number);
+		bytes_read++;
+	}
+
+	return bytes_read;
+}
+
+static bool init_protocol(info_packet* info, const usart_ctx* usart) {
 	bool valid_response = false;
 	char recv[16];
 
 	char buf_sz[] = {IN_BUF_SIZE >> 8, IN_BUF_SIZE & 0xFF};
-
-	while (!valid_response) {
 		
-		send_str("bfsz\r\n", usart);
-		send_data(buf_sz, 2, usart);
+	send_str("bfsz\r\n", usart);
+	send_data(buf_sz, 2, usart);
 
-		if (recv_str(recv, 16, usart, 2000)) {
-			valid_response = strcmp(recv, "info") == 0;
+	if (recv_str(recv, 16, usart, 2000)) {
+		valid_response = strcmp(recv, "info") == 0;
 
-			if (valid_response) {
-				send_str("good\r\n", usart);
-			} else {
-				send_str("bad\r\n", usart);
-			}
+		if (!valid_response) {
+			send_str("bad\r\n", usart);
+			return valid_response;
 		}
+
+		// Host is expected to send proper number of bytes
+		// in the correct order.
+		unsigned int expected_bytes = 8;
+		valid_response = recv_data(recv, expected_bytes, usart, 2000) == expected_bytes;
+
+		if (!valid_response) {
+			send_str("bad\r\n", usart);
+			return valid_response;
+		}
+
+		memcpy(info, recv, 8);
+		send_str("good\r\n", usart);
 	}
+
+	return valid_response;
 }
 
 void hostio_task(void* args) {
 	usart_ctx* usart = (usart_ctx*)args;
+	info_packet info;
 
 	for (;;) {
-		init_protocol(usart);
+		init_protocol(&info, usart);
 		
 		while(1);	
 	}

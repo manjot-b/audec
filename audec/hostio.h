@@ -19,6 +19,16 @@ typedef struct {
 	uint16_t rts;
 } usart_ctx;
 
+/**
+ * Holds the data from the "info" stage during the initialization protocol.
+ */
+typedef struct {
+	uint32_t sample_rate;
+	uint8_t bit_depth;
+	uint8_t channels;
+	uint16_t data_length;
+} info_packet;
+
 void hostio_setup(const usart_ctx* usart);
 void hostio_task(void* args);
 
