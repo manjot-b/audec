@@ -105,18 +105,18 @@ static void sendChar(char data) {
  * @return Whether a valid string was received within the timeout period.
  */
 static bool receiveString(char* buf, unsigned int size, TickType_t timeout) {
-	TickType_t ticks_old = xTaskGetTickCount();
-	bool timed_out = false;
-	bool received_crlf = false;
+	TickType_t ticksOld = xTaskGetTickCount();
+	bool timedOut = false;
+	bool receivedCrlf = false;
 
 	unsigned int i = 0;
 
-	while (i < size && !received_crlf) {
+	while (i < size && !receivedCrlf) {
 		while ( usart_get_flag(usart.number, USART_SR_RXNE) == 0 ) {
 			taskYIELD();
 
-			timed_out = timeout > 0 && xTaskGetTickCount() - ticks_old > timeout;
-			if (timed_out) {
+			timedOut = timeout > 0 && xTaskGetTickCount() - ticksOld > timeout;
+			if (timedOut) {
 				break;
 			}
 		}
@@ -124,8 +124,8 @@ static bool receiveString(char* buf, unsigned int size, TickType_t timeout) {
 		buf[i] = usart_recv(usart.number);
 
 		if (i > 0) {
-			received_crlf = buf[i-1] == '\r' && buf[i] == '\n';
-			if (received_crlf) {
+			receivedCrlf = buf[i-1] == '\r' && buf[i] == '\n';
+			if (receivedCrlf) {
 				buf[i-1] = '\0';
 			}
 		}
@@ -133,7 +133,7 @@ static bool receiveString(char* buf, unsigned int size, TickType_t timeout) {
 		i++;
 	}
 
-	return received_crlf;
+	return receivedCrlf;
 }
 
 /**
@@ -148,32 +148,32 @@ static bool receiveString(char* buf, unsigned int size, TickType_t timeout) {
  * @return The number of bytes received within the timeout period.
  */
 static unsigned int receiveData(char* buf, unsigned int size, TickType_t timeout) {
-	TickType_t ticks_old = xTaskGetTickCount();
-	bool timed_out = false;
+	TickType_t ticksOld = xTaskGetTickCount();
+	bool timedOut = false;
 
-	unsigned int bytes_read = 0;
+	unsigned int bytesRead = 0;
 
-	while (bytes_read < size) {
+	while (bytesRead < size) {
 		while ( usart_get_flag(usart.number, USART_SR_RXNE) == 0 ) {
 			taskYIELD();
 
-			timed_out = timeout > 0 && xTaskGetTickCount() - ticks_old > timeout;
-			if (timed_out) {
+			timedOut = timeout > 0 && xTaskGetTickCount() - ticksOld > timeout;
+			if (timedOut) {
 				break;
 			}
 		}
 
-		buf[bytes_read] = usart_recv(usart.number);
-		bytes_read++;
+		buf[bytesRead] = usart_recv(usart.number);
+		bytesRead++;
 	}
 
-	return bytes_read;
+	return bytesRead;
 }
 
 static bool initProtocol(InfoPacket* info) {
 	bool validResponse = false;
 	char recv[16];
-	char buf_sz[] = {IN_BUF_SIZE >> 8, IN_BUF_SIZE & 0xFF};
+	char bufSize[] = {IN_BUF_SIZE >> 8, IN_BUF_SIZE & 0xFF};
 
 	while(!validResponse) {
 		receiveString(recv, 16, 0);
@@ -181,7 +181,7 @@ static bool initProtocol(InfoPacket* info) {
 	}
 	
 	sendString("bfsz\r\n");
-	sendData(buf_sz, 2);
+	sendData(bufSize, 2);
 
 	if (receiveString(recv, 16, 2000)) {
 		validResponse = strcmp(recv, "info") == 0;
@@ -193,8 +193,8 @@ static bool initProtocol(InfoPacket* info) {
 
 		// Host is expected to send proper number of bytes
 		// in the correct order.
-		unsigned int expected_bytes = 8;
-		validResponse = receiveData(recv, expected_bytes, 2000) == expected_bytes;
+		unsigned int expectedBytes = 8;
+		validResponse = receiveData(recv, expectedBytes, 2000) == expectedBytes;
 
 		if (!validResponse) {
 			sendString("bad\r\n");
