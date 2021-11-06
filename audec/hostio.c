@@ -171,37 +171,41 @@ static unsigned int receiveData(char* buf, unsigned int size, TickType_t timeout
 }
 
 static bool initProtocol(InfoPacket* info) {
-	bool valid_response = false;
+	bool validResponse = false;
 	char recv[16];
-
 	char buf_sz[] = {IN_BUF_SIZE >> 8, IN_BUF_SIZE & 0xFF};
+
+	while(!validResponse) {
+		receiveString(recv, 16, 0);
+		validResponse = strcmp(recv, "ready") == 0;
+	}
 	
 	sendString("bfsz\r\n");
 	sendData(buf_sz, 2);
 
 	if (receiveString(recv, 16, 2000)) {
-		valid_response = strcmp(recv, "info") == 0;
+		validResponse = strcmp(recv, "info") == 0;
 
-		if (!valid_response) {
+		if (!validResponse) {
 			sendString("bad\r\n");
-			return valid_response;
+			return validResponse;
 		}
 
 		// Host is expected to send proper number of bytes
 		// in the correct order.
 		unsigned int expected_bytes = 8;
-		valid_response = receiveData(recv, expected_bytes, 2000) == expected_bytes;
+		validResponse = receiveData(recv, expected_bytes, 2000) == expected_bytes;
 
-		if (!valid_response) {
+		if (!validResponse) {
 			sendString("bad\r\n");
-			return valid_response;
+			return validResponse;
 		}
 
 		memcpy(info, recv, 8);
 		sendString("good\r\n");
 	}
 
-	return valid_response;
+	return validResponse;
 }
 
 void hostIOTask(void* args) {
