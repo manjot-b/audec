@@ -14,19 +14,19 @@
 
 #include "hostio.h"
 
-static bool init_protocol(info_packet* info, const usart_ctx* usart);
-static void send_str(const char* str, const usart_ctx* usart);
-static void send_data(const char* data, uint32_t size, const usart_ctx* usart);
-static void send_char(char data, const usart_ctx* usart);
-static bool recv_str(char* buf, unsigned int size, const usart_ctx* usart, TickType_t timeout);
-static unsigned int recv_data(char* buf, unsigned int size, const usart_ctx* usart, TickType_t timeout);
+static bool initProtocol(InfoPacket* info, const UsartContext* usart);
+static void sendString(const char* str, const UsartContext* usart);
+static void sendData(const char* data, uint32_t size, const UsartContext* usart);
+static void sendChar(char data, const UsartContext* usart);
+static bool receiveString(char* buf, unsigned int size, const UsartContext* usart, TickType_t timeout);
+static unsigned int receiveData(char* buf, unsigned int size, const UsartContext* usart, TickType_t timeout);
 
 #define IN_BUF_SIZE 256
 static char in_buf[IN_BUF_SIZE];
 
-void hostio_setup(const usart_ctx* usart) {
-	rcc_periph_clock_enable(usart->rcc_gpio);
-	rcc_periph_clock_enable(usart->rcc_usart);
+void hostIOSetup(const UsartContext* usart) {
+	rcc_periph_clock_enable(usart->rccGpio);
+	rcc_periph_clock_enable(usart->rccUsart);
 
 	gpio_set_mode(usart->gpio,
 		GPIO_MODE_OUTPUT_50_MHZ,
@@ -47,19 +47,19 @@ void hostio_setup(const usart_ctx* usart) {
 	usart_enable(usart->number);
 }
 
-static void send_str(const char* str, const usart_ctx* usart) {
+static void sendString(const char* str, const UsartContext* usart) {
 	for(; *str; ++str) {
-		send_char(*str, usart);
+		sendChar(*str, usart);
 	}
 }
 
-static void send_data(const char* data, uint32_t size, const usart_ctx* usart) {
+static void sendData(const char* data, uint32_t size, const UsartContext* usart) {
 	for(uint32_t i = 0; i < size; i++) {
-		send_char(data[i], usart);
+		sendChar(data[i], usart);
 	}
 }
 
-static void send_char(char data, const usart_ctx* usart) {
+static void sendChar(char data, const UsartContext* usart) {
 	while ( !usart_get_flag(usart->number, USART_SR_TXE) ) {
 		taskYIELD();
 	}
@@ -78,7 +78,7 @@ static void send_char(char data, const usart_ctx* usart) {
  *
  * @return Whether a valid string was received within the timeout period.
  */
-static bool recv_str(char* buf, unsigned int size, const usart_ctx* usart, TickType_t timeout) {
+static bool receiveString(char* buf, unsigned int size, const UsartContext* usart, TickType_t timeout) {
 	TickType_t ticks_old = xTaskGetTickCount();
 	bool timed_out = false;
 	bool received_crlf = false;
@@ -121,7 +121,7 @@ static bool recv_str(char* buf, unsigned int size, const usart_ctx* usart, TickT
  *
  * @return The number of bytes received within the timeout period.
  */
-static unsigned int recv_data(char* buf, unsigned int size, const usart_ctx* usart, TickType_t timeout) {
+static unsigned int receiveData(char* buf, unsigned int size, const UsartContext* usart, TickType_t timeout) {
 	TickType_t ticks_old = xTaskGetTickCount();
 	bool timed_out = false;
 
@@ -144,46 +144,46 @@ static unsigned int recv_data(char* buf, unsigned int size, const usart_ctx* usa
 	return bytes_read;
 }
 
-static bool init_protocol(info_packet* info, const usart_ctx* usart) {
+static bool initProtocol(InfoPacket* info, const UsartContext* usart) {
 	bool valid_response = false;
 	char recv[16];
 
 	char buf_sz[] = {IN_BUF_SIZE >> 8, IN_BUF_SIZE & 0xFF};
-		
-	send_str("bfsz\r\n", usart);
-	send_data(buf_sz, 2, usart);
+	
+	sendString("bfsz\r\n", usart);
+	sendData(buf_sz, 2, usart);
 
-	if (recv_str(recv, 16, usart, 2000)) {
+	if (receiveString(recv, 16, usart, 2000)) {
 		valid_response = strcmp(recv, "info") == 0;
 
 		if (!valid_response) {
-			send_str("bad\r\n", usart);
+			sendString("bad\r\n", usart);
 			return valid_response;
 		}
 
 		// Host is expected to send proper number of bytes
 		// in the correct order.
 		unsigned int expected_bytes = 8;
-		valid_response = recv_data(recv, expected_bytes, usart, 2000) == expected_bytes;
+		valid_response = receiveData(recv, expected_bytes, usart, 2000) == expected_bytes;
 
 		if (!valid_response) {
-			send_str("bad\r\n", usart);
+			sendString("bad\r\n", usart);
 			return valid_response;
 		}
 
 		memcpy(info, recv, 8);
-		send_str("good\r\n", usart);
+		sendString("good\r\n", usart);
 	}
 
 	return valid_response;
 }
 
-void hostio_task(void* args) {
-	usart_ctx* usart = (usart_ctx*)args;
-	info_packet info;
+void hostIOTask(void* args) {
+	UsartContext* usart = (UsartContext*)args;
+	InfoPacket info;
 
 	for (;;) {
-		init_protocol(&info, usart);
+		initProtocol(&info, usart);
 		
 		while(1);	
 	}

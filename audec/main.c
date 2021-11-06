@@ -9,9 +9,9 @@
 
 #include "hostio.h"
 
-static usart_ctx usart = {
-	.rcc_gpio	= RCC_GPIOB,
-	.rcc_usart	= RCC_USART3,
+static UsartContext usart = {
+	.rccGpio	= RCC_GPIOB,
+	.rccUsart	= RCC_USART3,
 	.number		= USART3,
 	.gpio		= GPIOB,
 	.tx			= GPIO_USART3_TX,
@@ -30,9 +30,9 @@ void vApplicationStackOverflowHook(
 int main(void) {
 	rcc_clock_setup_pll(&rcc_hse_configs[RCC_CLOCK_HSE8_72MHZ]);
 
-	hostio_setup(&usart);
+	hostIOSetup(&usart);
 
-	xTaskCreate(hostio_task, "hostio", 500, (void*)&usart, configMAX_PRIORITIES-1, NULL);
+	xTaskCreate(hostIOTask, "hostio", 500, (void*)&usart, configMAX_PRIORITIES-1, NULL);
 	vTaskStartScheduler();
 
 	for (;;);
