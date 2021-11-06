@@ -6,20 +6,6 @@
 #include <libopencm3/stm32/usart.h>
 
 /**
- * USART Context
- */
-typedef struct {
-	enum rcc_periph_clken rccGpio;
-	enum rcc_periph_clken rccUsart;
-	uint32_t number;
-	uint32_t gpio;
-	uint16_t tx;
-	uint16_t rx;
-	uint16_t cts;
-	uint16_t rts;
-} UsartContext;
-
-/**
  * Holds the data from the "info" stage during the initialization protocol.
  */
 typedef struct {
@@ -29,7 +15,7 @@ typedef struct {
 	uint16_t dataLength;
 } InfoPacket;
 
-void hostIOSetup(const UsartContext* usart);
+void hostIOSetup();
 void hostIOTask(void* args);
 
 #endif
