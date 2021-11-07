@@ -1,10 +1,9 @@
 #ifndef HOSTIO_H
 #define HOSTIO_H
 
-#include <libopencm3/stm32/rcc.h>
-#include <libopencm3/stm32/gpio.h>
-#include <libopencm3/stm32/usart.h>
+#include "hostio.h"
 
+extern TaskHandle_t hostIOHandle;
 /**
  * Holds the data from the "info" stage during the initialization protocol.
  */
@@ -15,7 +14,7 @@ typedef struct {
 	uint16_t dataLength;
 } InfoPacket;
 
-void hostIOSetup();
+void hostIOSetup(void);
 void hostIOTask(void* args);
 
 #endif

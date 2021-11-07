@@ -12,6 +12,12 @@
 #include "task.h"
 #include "queue.h"
 
+#include <libopencm3/cm3/nvic.h>
+#include <libopencm3/stm32/dma.h>
+#include <libopencm3/stm32/gpio.h>
+#include <libopencm3/stm32/rcc.h>
+#include <libopencm3/stm32/usart.h>
+
 #include "hostio.h"
 
 /**
@@ -39,8 +45,28 @@ static UsartContext usart = {
 	.rts		= GPIO14,
 };
 
+/**
+ * DMA Context
+ */
+typedef struct {
+	enum rcc_periph_clken rccDma;
+	uint8_t irq;
+	uint32_t number;
+	uint8_t channel;
+	uint32_t peripheralAddr;
+} DmaContext;
 
-static bool initProtocol(InfoPacket* info);
+static DmaContext dma = {
+	.rccDma				= RCC_DMA1,
+	.irq				= NVIC_DMA1_CHANNEL3_IRQ,
+	.number				= DMA1,
+	.channel			= DMA_CHANNEL3,
+	.peripheralAddr		= (uint32_t)&USART3_DR,
+};
+
+static bool initProtocol(volatile InfoPacket* info);
+static void copyToInfoStruct(volatile InfoPacket* info, char* data);
+static void restoreDma(uint16_t size);
 static void sendString(const char* str);
 static void sendData(const char* data, uint32_t size);
 static void sendChar(char data);
@@ -48,9 +74,10 @@ static bool receiveString(char* buf, unsigned int size, TickType_t timeout);
 static unsigned int receiveData(char* buf, unsigned int size, TickType_t timeout);
 
 #define IN_BUF_SIZE 256
-static char in_buf[IN_BUF_SIZE];
+static volatile uint8_t inputBuf[IN_BUF_SIZE];
 
-void hostIOSetup() {
+void hostIOSetup(void) {
+	// Setup USART with hardware flow control.
 	rcc_periph_clock_enable(usart.rccGpio);
 	rcc_periph_clock_enable(usart.rccUsart);
 
@@ -70,7 +97,42 @@ void hostIOSetup() {
 	usart_set_mode(usart.number, USART_MODE_TX_RX);
 	usart_set_parity(usart.number, USART_PARITY_NONE);
 	usart_set_flow_control(usart.number, USART_FLOWCONTROL_RTS_CTS);
+	usart_enable_rx_dma(usart.number);
 	usart_enable(usart.number);
+
+	// Enable DMA irq
+	rcc_periph_clock_enable(dma.rccDma);
+	nvic_set_priority(dma.irq, 0);
+	nvic_enable_irq(dma.irq);
+
+	// Confifure DMA
+	dma_channel_reset(dma.number, dma.channel);
+	dma_set_peripheral_address(dma.number, dma.channel, dma.peripheralAddr);
+	dma_set_memory_address(dma.number, dma.channel, (uint32_t)inputBuf);
+
+	dma_set_peripheral_size(dma.number, dma.channel, DMA_CCR_MSIZE_8BIT);
+	dma_set_memory_size(dma.number, dma.channel, DMA_CCR_MSIZE_8BIT);
+
+	dma_enable_memory_increment_mode(dma.number, dma.channel);
+	dma_set_read_from_peripheral(dma.number, dma.channel);
+	dma_set_priority(dma.number, dma.channel, DMA_CCR_PL_HIGH);
+	dma_enable_transfer_complete_interrupt(dma.number, dma.channel);
+}
+
+static void restoreDma(uint16_t size) {
+	dma_disable_channel(dma.number, dma.channel);
+	dma_set_number_of_data(dma.number, dma.channel, size);
+	dma_enable_channel(dma.number, dma.channel);
+}
+
+void dma1_channel3_isr(void) {
+	if (dma_get_interrupt_flag(dma.number, dma.channel, DMA_TCIF)) {
+		dma_clear_interrupt_flags(dma.number, dma.channel, DMA_TCIF);
+	}
+
+	BaseType_t woken = pdFALSE;	
+	vTaskNotifyGiveFromISR(hostIOHandle, &woken);
+	portYIELD_FROM_ISR(woken);
 }
 
 static void sendString(const char* str) {
@@ -170,7 +232,7 @@ static unsigned int receiveData(char* buf, unsigned int size, TickType_t timeout
 	return bytesRead;
 }
 
-static bool initProtocol(InfoPacket* info) {
+static bool initProtocol(volatile InfoPacket* info) {
 	bool validResponse = false;
 	char recv[16];
 	char bufSize[] = {IN_BUF_SIZE >> 8, IN_BUF_SIZE & 0xFF};
@@ -187,7 +249,6 @@ static bool initProtocol(InfoPacket* info) {
 		validResponse = strcmp(recv, "info") == 0;
 
 		if (!validResponse) {
-			sendString("bad\r\n");
 			return validResponse;
 		}
 
@@ -197,22 +258,36 @@ static bool initProtocol(InfoPacket* info) {
 		validResponse = receiveData(recv, expectedBytes, 2000) == expectedBytes;
 
 		if (!validResponse) {
-			sendString("bad\r\n");
 			return validResponse;
 		}
 
-		memcpy(info, recv, 8);
-		sendString("good\r\n");
+		copyToInfoStruct(info, recv);
 	}
 
 	return validResponse;
 }
 
-void hostIOTask(void* args) {
-	InfoPacket info;
+static void copyToInfoStruct(volatile InfoPacket* info, char* data) {
+	info->sampleRate |= data[0] << 24;
+	info->sampleRate |= data[1] << 16;
+	info->sampleRate |= data[2] << 8;
+	info->sampleRate |= data[3];
+	info->bitDepth = *((uint8_t*)(&data[4]));
+	info->channels = *((uint8_t*)(&data[5]));
+	info->dataLength |= data[6] << 8;
+	info->dataLength |= data[7];
+}
+
+void hostIOTask(void*) {
+	volatile InfoPacket info;
 
 	for (;;) {
-		initProtocol(&info);
+		if (initProtocol(&info)) {
+			restoreDma(info.dataLength);
+
+			ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+			sendString("good\r\n");
+		}
 		
 		while(1);	
 	}

@@ -9,6 +9,8 @@
 
 #include "hostio.h"
 
+TaskHandle_t hostIOHandle;
+
 void vApplicationStackOverflowHook(
   TaskHandle_t pxTask __attribute((unused)),
   portCHAR *pcTaskName __attribute((unused))
@@ -21,7 +23,7 @@ int main(void) {
 
 	hostIOSetup();
 
-	xTaskCreate(hostIOTask, "hostio", 500, NULL, configMAX_PRIORITIES-1, NULL);
+	xTaskCreate(hostIOTask, "hostio", 500, NULL, configMAX_PRIORITIES-1, &hostIOHandle);
 	vTaskStartScheduler();
 
 	for (;;);
