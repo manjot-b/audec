@@ -97,7 +97,6 @@ void hostIOSetup(void) {
 	usart_set_mode(usart.number, USART_MODE_TX_RX);
 	usart_set_parity(usart.number, USART_PARITY_NONE);
 	usart_set_flow_control(usart.number, USART_FLOWCONTROL_RTS_CTS);
-	usart_enable_rx_dma(usart.number);
 	usart_enable(usart.number);
 
 	// Enable DMA irq
@@ -106,6 +105,7 @@ void hostIOSetup(void) {
 	nvic_enable_irq(dma.irq);
 
 	// Confifure DMA
+	dma_disable_channel(dma.number, dma.channel);
 	dma_channel_reset(dma.number, dma.channel);
 	dma_set_peripheral_address(dma.number, dma.channel, dma.peripheralAddr);
 	dma_set_memory_address(dma.number, dma.channel, (uint32_t)inputBuf);
@@ -121,7 +121,11 @@ void hostIOSetup(void) {
 
 static void restoreDma(uint16_t size) {
 	dma_disable_channel(dma.number, dma.channel);
+	usart_disable_rx_dma(usart.number);
+
 	dma_set_number_of_data(dma.number, dma.channel, size);
+
+	usart_enable_rx_dma(usart.number);
 	dma_enable_channel(dma.number, dma.channel);
 }
 
@@ -179,7 +183,7 @@ static bool receiveString(char* buf, unsigned int size, TickType_t timeout) {
 
 			timedOut = timeout > 0 && xTaskGetTickCount() - ticksOld > timeout;
 			if (timedOut) {
-				break;
+				return receivedCrlf;
 			}
 		}
 
@@ -221,7 +225,7 @@ static unsigned int receiveData(char* buf, unsigned int size, TickType_t timeout
 
 			timedOut = timeout > 0 && xTaskGetTickCount() - ticksOld > timeout;
 			if (timedOut) {
-				break;
+				return bytesRead;
 			}
 		}
 
@@ -284,9 +288,8 @@ void hostIOTask(void*) {
 	for (;;) {
 		if (initProtocol(&info)) {
 			restoreDma(info.dataLength);
-
+			sendString("ready\r\n");
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-			sendString("good\r\n");
 		}
 		
 		while(1);	
