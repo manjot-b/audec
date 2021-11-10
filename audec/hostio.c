@@ -119,6 +119,11 @@ void hostIOSetup(void) {
 	dma_enable_transfer_complete_interrupt(dma.number, dma.channel);
 }
 
+/**
+ * Restores/renables DMA to work with USART.
+ *
+ * @param size The number of bytes that should be read by DMA before a interrupt is generated.
+ */
 static void restoreDma(uint16_t size) {
 	dma_disable_channel(dma.number, dma.channel);
 	usart_disable_rx_dma(usart.number);
@@ -129,6 +134,9 @@ static void restoreDma(uint16_t size) {
 	dma_enable_channel(dma.number, dma.channel);
 }
 
+/**
+ * The DMA interrupt for the given USART. Notifies the hostIOTask that the transfer is complete.
+ */
 void dma1_channel3_isr(void) {
 	if (dma_get_interrupt_flag(dma.number, dma.channel, DMA_TCIF)) {
 		dma_clear_interrupt_flags(dma.number, dma.channel, DMA_TCIF);
@@ -139,18 +147,34 @@ void dma1_channel3_isr(void) {
 	portYIELD_FROM_ISR(woken);
 }
 
+/**
+ * Sends a NULL terminated string over USART.
+ *
+ * @param str[in] The NULL termianted string to send.
+ */
 static void sendString(const char* str) {
 	for(; *str; ++str) {
 		sendChar(*str);
 	}
 }
 
+/**
+ * Sends a specified number of bytes  over USART.
+ *
+ * @param data[in] The bytes to send over USART.
+ * @param size The number of bytes to send from data.
+ */
 static void sendData(const char* data, uint32_t size) {
 	for(uint32_t i = 0; i < size; i++) {
 		sendChar(data[i]);
 	}
 }
 
+/**
+ * Sends a single char over USART.
+ *
+ * @note This task yields the task while USART is busy.
+ */
 static void sendChar(char data) {
 	while ( !usart_get_flag(usart.number, USART_SR_TXE) ) {
 		taskYIELD();
@@ -164,7 +188,6 @@ static void sendChar(char data) {
  *
  * @param buf[out] The buffer to store the string into. @note '\r\n' will be stripped.
  * @param size The size of the buffer.
- * @param usart The USART context to receive data from.
  * @param timeout The amount of time to wait before returning. If set to 0 then the function
  * waits indefinetly.
  *
@@ -207,7 +230,6 @@ static bool receiveString(char* buf, unsigned int size, TickType_t timeout) {
  *
  * @param buf[out] The buffer to store the data into.
  * @param size The number of bytes to receive.
- * @param usart The USART context to receive data from.
  * @param timeout The amount of time to wait before returning. If set to 0 then the function
  * waits indefinetly.
  *
@@ -236,6 +258,15 @@ static unsigned int receiveData(char* buf, unsigned int size, TickType_t timeout
 	return bytesRead;
 }
 
+/**
+ * Performs the initial handshake with the host.
+ *
+ * Waits for the host to initiate the handshake and then sends over the size of
+ * @c inputBuf. We then wait for all the bytes of @c InfoPacket to be received.
+ *
+ * @param info[out] The info packet to populated with information for this transaction
+ * of audio data.
+ */
 static bool initProtocol(volatile InfoPacket* info) {
 	bool validResponse = false;
 	char recv[16];
@@ -271,7 +302,18 @@ static bool initProtocol(volatile InfoPacket* info) {
 	return validResponse;
 }
 
+/**
+ * Copies the received data into the info packet.
+ *
+ * @param info[out] The info packet to populate.
+ * @param data[in] The data to copy in @c info.
+ *
+ * @note The data is expected to be in big-endian and in the same order as the variables
+ * in @c InfoPacket are declared.
+ */
 static void copyToInfoStruct(volatile InfoPacket* info, char* data) {
+	// Due to struct-packing, the simplest way to copy the data is one variable
+	// at a time.
 	info->sampleRate |= data[0] << 24;
 	info->sampleRate |= data[1] << 16;
 	info->sampleRate |= data[2] << 8;
