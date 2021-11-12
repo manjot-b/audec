@@ -8,9 +8,8 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "FreeRTOS.h"
-#include "task.h"
-#include "queue.h"
+#include <FreeRTOS.h>
+#include <task.h>
 
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/stm32/dma.h>
@@ -20,6 +19,7 @@
 
 #include "hostio.h"
 #include "buffers.h"
+#include "taskdata.h"
 
 /**
  * USART Context
@@ -141,7 +141,7 @@ void dma1_channel3_isr(void) {
 	}
 
 	BaseType_t woken = pdFALSE;	
-	vTaskNotifyGiveFromISR(hostIOHandle, &woken);
+	vTaskNotifyGiveFromISR(taskData.hostIOHandle, &woken);
 	portYIELD_FROM_ISR(woken);
 }
 
