@@ -19,6 +19,7 @@
 #include <libopencm3/stm32/usart.h>
 
 #include "hostio.h"
+#include "buffers.h"
 
 /**
  * USART Context
@@ -73,9 +74,6 @@ static void sendChar(char data);
 static bool receiveString(char* buf, unsigned int size, TickType_t timeout);
 static unsigned int receiveData(char* buf, unsigned int size, TickType_t timeout);
 
-#define IN_BUF_SIZE 256
-static volatile uint8_t inputBuf[IN_BUF_SIZE];
-
 void hostIOSetup(void) {
 	// Setup USART with hardware flow control.
 	rcc_periph_clock_enable(usart.rccGpio);
@@ -108,7 +106,7 @@ void hostIOSetup(void) {
 	dma_disable_channel(dma.number, dma.channel);
 	dma_channel_reset(dma.number, dma.channel);
 	dma_set_peripheral_address(dma.number, dma.channel, dma.peripheralAddr);
-	dma_set_memory_address(dma.number, dma.channel, (uint32_t)inputBuf);
+	dma_set_memory_address(dma.number, dma.channel, (uint32_t)g_inputBuf);
 
 	dma_set_peripheral_size(dma.number, dma.channel, DMA_CCR_MSIZE_8BIT);
 	dma_set_memory_size(dma.number, dma.channel, DMA_CCR_MSIZE_8BIT);
