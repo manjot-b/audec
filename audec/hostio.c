@@ -68,6 +68,7 @@ static DmaContext dma = {
 static bool initProtocol(InfoPacket* info);
 static void copyToInfoStruct(InfoPacket* info, char* data);
 static void restoreDma(uint16_t size);
+static void disableDma(void);
 static void sendString(const char* str);
 static void sendData(const char* data, uint32_t size);
 static void sendChar(char data);
@@ -130,6 +131,14 @@ static void restoreDma(uint16_t size) {
 
 	usart_enable_rx_dma(usart.number);
 	dma_enable_channel(dma.number, dma.channel);
+}
+
+/**
+ * Disables DMA to work with USART.
+ */
+static void disableDma(void) {
+	dma_disable_channel(dma.number, dma.channel);
+	usart_disable_rx_dma(usart.number);
 }
 
 /**
@@ -330,7 +339,9 @@ void hostIOTask(void*) {
 		if (initProtocol(&info)) {
 			restoreDma(info.dataLength);
 			sendString("ready\r\n");
+
 			ulTaskNotifyTakeIndexed(HOSTIO_NOTIFICATION_DMA, pdTRUE, portMAX_DELAY);
+			disableDma();
 
 			xQueueSend(taskData.decoderQueue, &info, portMAX_DELAY);
 		}
