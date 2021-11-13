@@ -14,7 +14,8 @@ void decoderTask(void*) {
 	InfoPacket info;
 
 	for(;;) {
-		xQueueReceive(taskData.decoderQueue, &info, 0);
+		xTaskNotifyGiveIndexed(taskData.hostIOHandle, HOSTIO_NOTIFICATION_DECODER);
+		xQueueReceive(taskData.decoderQueue, &info, portMAX_DELAY);
 		while(1) {
 			taskYIELD();
 		}

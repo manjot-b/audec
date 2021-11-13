@@ -17,6 +17,17 @@ typedef struct {
 extern TaskData taskData;
 
 /**
+ * Notifications for the HostIO task.
+ */
+enum {
+	/** Indicates that the DMA transfer is complete. */
+	HOSTIO_NOTIFICATION_DMA = 0,
+
+	/** Indicates that the decoder is ready to decode data. */
+	HOSTIO_NOTIFICATION_DECODER
+};
+
+/**
  * Holds the data about the chunk of audio data received.
  */
 typedef struct {
