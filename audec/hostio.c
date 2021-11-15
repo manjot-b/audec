@@ -8,9 +8,8 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "FreeRTOS.h"
-#include "task.h"
-#include "queue.h"
+#include <FreeRTOS.h>
+#include <task.h>
 
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/stm32/dma.h>
@@ -19,6 +18,8 @@
 #include <libopencm3/stm32/usart.h>
 
 #include "hostio.h"
+#include "buffers.h"
+#include "taskdata.h"
 
 /**
  * USART Context
@@ -64,17 +65,15 @@ static DmaContext dma = {
 	.peripheralAddr		= (uint32_t)&USART3_DR,
 };
 
-static bool initProtocol(volatile InfoPacket* info);
-static void copyToInfoStruct(volatile InfoPacket* info, char* data);
+static bool initProtocol(InfoPacket* info);
+static void copyToInfoStruct(InfoPacket* info, char* data);
 static void restoreDma(uint16_t size);
+static void disableDma(void);
 static void sendString(const char* str);
 static void sendData(const char* data, uint32_t size);
 static void sendChar(char data);
 static bool receiveString(char* buf, unsigned int size, TickType_t timeout);
 static unsigned int receiveData(char* buf, unsigned int size, TickType_t timeout);
-
-#define IN_BUF_SIZE 256
-static volatile uint8_t inputBuf[IN_BUF_SIZE];
 
 void hostIOSetup(void) {
 	// Setup USART with hardware flow control.
@@ -108,7 +107,7 @@ void hostIOSetup(void) {
 	dma_disable_channel(dma.number, dma.channel);
 	dma_channel_reset(dma.number, dma.channel);
 	dma_set_peripheral_address(dma.number, dma.channel, dma.peripheralAddr);
-	dma_set_memory_address(dma.number, dma.channel, (uint32_t)inputBuf);
+	dma_set_memory_address(dma.number, dma.channel, (uint32_t)g_inputBuf);
 
 	dma_set_peripheral_size(dma.number, dma.channel, DMA_CCR_MSIZE_8BIT);
 	dma_set_memory_size(dma.number, dma.channel, DMA_CCR_MSIZE_8BIT);
@@ -135,6 +134,14 @@ static void restoreDma(uint16_t size) {
 }
 
 /**
+ * Disables DMA to work with USART.
+ */
+static void disableDma(void) {
+	dma_disable_channel(dma.number, dma.channel);
+	usart_disable_rx_dma(usart.number);
+}
+
+/**
  * The DMA interrupt for the given USART. Notifies the hostIOTask that the transfer is complete.
  */
 void dma1_channel3_isr(void) {
@@ -143,7 +150,7 @@ void dma1_channel3_isr(void) {
 	}
 
 	BaseType_t woken = pdFALSE;	
-	vTaskNotifyGiveFromISR(hostIOHandle, &woken);
+	vTaskNotifyGiveIndexedFromISR(taskData.hostIOHandle, HOSTIO_NOTIFICATION_DMA, &woken);
 	portYIELD_FROM_ISR(woken);
 }
 
@@ -267,7 +274,7 @@ static unsigned int receiveData(char* buf, unsigned int size, TickType_t timeout
  * @param info[out] The info packet to populated with information for this transaction
  * of audio data.
  */
-static bool initProtocol(volatile InfoPacket* info) {
+static bool initProtocol(InfoPacket* info) {
 	bool validResponse = false;
 	char recv[16];
 	char bufSize[] = {IN_BUF_SIZE >> 8, IN_BUF_SIZE & 0xFF};
@@ -311,7 +318,7 @@ static bool initProtocol(volatile InfoPacket* info) {
  * @note The data is expected to be in big-endian and in the same order as the variables
  * in @c InfoPacket are declared.
  */
-static void copyToInfoStruct(volatile InfoPacket* info, char* data) {
+static void copyToInfoStruct(InfoPacket* info, char* data) {
 	// Due to struct-packing, the simplest way to copy the data is one variable
 	// at a time.
 	info->sampleRate |= data[0] << 24;
@@ -325,16 +332,19 @@ static void copyToInfoStruct(volatile InfoPacket* info, char* data) {
 }
 
 void hostIOTask(void*) {
-	volatile InfoPacket info;
+	InfoPacket info;
 
 	for (;;) {
+		ulTaskNotifyTakeIndexed(HOSTIO_NOTIFICATION_DECODER, pdTRUE, portMAX_DELAY);
 		if (initProtocol(&info)) {
 			restoreDma(info.dataLength);
 			sendString("ready\r\n");
-			ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+			ulTaskNotifyTakeIndexed(HOSTIO_NOTIFICATION_DMA, pdTRUE, portMAX_DELAY);
+			disableDma();
+
+			xQueueSend(taskData.decoderQueue, &info, portMAX_DELAY);
 		}
-		
-		while(1);	
 	}
 }
 

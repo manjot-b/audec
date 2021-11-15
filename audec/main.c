@@ -1,15 +1,18 @@
 /**
- * Initialze and start all tasks.
+ * Initialize and start all tasks.
  */
-#include "FreeRTOS.h"
-#include "task.h"
+#include <FreeRTOS.h>
+#include <task.h>
+#include <queue.h>
 
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
 
+#include "decoder.h"
 #include "hostio.h"
+#include "taskdata.h"
 
-TaskHandle_t hostIOHandle;
+TaskData taskData;
 
 void vApplicationStackOverflowHook(
   TaskHandle_t pxTask __attribute((unused)),
@@ -23,7 +26,9 @@ int main(void) {
 
 	hostIOSetup();
 
-	xTaskCreate(hostIOTask, "hostio", 500, NULL, configMAX_PRIORITIES-1, &hostIOHandle);
+	taskData.decoderQueue = xQueueCreate(10, sizeof(InfoPacket));
+	xTaskCreate(hostIOTask, "hostio", 500, NULL, configMAX_PRIORITIES-1, &(taskData.hostIOHandle));
+	xTaskCreate(decoderTask, "decoder", 200, NULL, configMAX_PRIORITIES-1, &(taskData.decoderHandle));
 	vTaskStartScheduler();
 
 	for (;;);

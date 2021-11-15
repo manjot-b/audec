@@ -35,10 +35,10 @@ SRCFILES	+= $(FREERTOS_DIR)/list.c
 SRCFILES 	+= $(FREERTOS_DIR)/tasks.c
 SRCFILES 	+= $(FREERTOS_PORT_DIR)/port.c
 SRCFILES 	+= $(FREERTOS_HEAP_DIR)/heap_4.c
+SRCFILES 	+= $(FREERTOS_DIR)/queue.c
 
 # SRCFILES 	+= $(FREERTOS_DIR)/croutine.c
 # SRCFILES 	+= $(FREERTOS_DIR)/event_groups.c
-# SRCFILES 	+= $(FREERTOS_DIR)/queue.c
 # SRCFILES 	+= $(FREERTOS_DIR)/stream_buffer.c
 # SRCFILES 	+= $(FREERTOS_DIR)/timers.c
 # SRCFILES 	+= $(FREERTOS_DIR)/portable/Common/mpu_wrappers.c
