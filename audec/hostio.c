@@ -90,7 +90,7 @@ void hostIOSetup(void) {
 		usart.rx | usart.cts);
 
 	usart_disable(usart.number);
-	usart_set_baudrate(usart.number, 115200);
+	usart_set_baudrate(usart.number, 1152000);
 	usart_set_databits(usart.number, 8);
 	usart_set_stopbits(usart.number, 1);
 	usart_set_mode(usart.number, USART_MODE_TX_RX);
@@ -199,6 +199,8 @@ static void sendChar(char data) {
  * waits indefinetly.
  *
  * @return Whether a valid string was received within the timeout period.
+ *
+ * @note If a buffer overrun occurs then this function returns @c false immediately.
  */
 static bool receiveString(char* buf, unsigned int size, TickType_t timeout) {
 	TickType_t ticksOld = xTaskGetTickCount();
@@ -208,7 +210,12 @@ static bool receiveString(char* buf, unsigned int size, TickType_t timeout) {
 	unsigned int i = 0;
 
 	while (i < size && !receivedCrlf) {
+		if ( usart_get_flag(usart.number, USART_SR_ORE)) {
+			buf[i] = usart_recv(usart.number);
+			return receivedCrlf;
+		}
 		while ( usart_get_flag(usart.number, USART_SR_RXNE) == 0 ) {
+
 			taskYIELD();
 
 			timedOut = timeout > 0 && xTaskGetTickCount() - ticksOld > timeout;
@@ -282,6 +289,9 @@ static bool initProtocol(InfoPacket* info) {
 	while(!validResponse) {
 		receiveString(recv, 16, 0);
 		validResponse = strcmp(recv, "ready") == 0;
+		if (!validResponse) {
+			sendString("bad\r\n");
+		}
 	}
 	
 	sendString("bfsz\r\n");
