@@ -256,6 +256,10 @@ static unsigned int receiveData(char* buf, unsigned int size, TickType_t timeout
 	unsigned int bytesRead = 0;
 
 	while (bytesRead < size) {
+		if ( usart_get_flag(usart.number, USART_SR_ORE)) {
+			buf[bytesRead] = usart_recv(usart.number);
+			return ++bytesRead;
+		}
 		while ( usart_get_flag(usart.number, USART_SR_RXNE) == 0 ) {
 			taskYIELD();
 
@@ -301,6 +305,7 @@ static bool initProtocol(InfoPacket* info) {
 		validResponse = strcmp(recv, "info") == 0;
 
 		if (!validResponse) {
+			sendString("bad\r\n");
 			return validResponse;
 		}
 
@@ -310,6 +315,7 @@ static bool initProtocol(InfoPacket* info) {
 		validResponse = receiveData(recv, expectedBytes, 2000) == expectedBytes;
 
 		if (!validResponse) {
+			sendString("bad\r\n");
 			return validResponse;
 		}
 
@@ -346,15 +352,16 @@ void hostIOTask(void*) {
 
 	for (;;) {
 		ulTaskNotifyTakeIndexed(HOSTIO_NOTIFICATION_DECODER, pdTRUE, portMAX_DELAY);
-		if (initProtocol(&info)) {
-			restoreDma(info.dataLength);
-			sendString("ready\r\n");
 
-			ulTaskNotifyTakeIndexed(HOSTIO_NOTIFICATION_DMA, pdTRUE, portMAX_DELAY);
-			disableDma();
+		while (!initProtocol(&info));
 
-			xQueueSend(taskData.decoderQueue, &info, portMAX_DELAY);
-		}
+		restoreDma(info.dataLength);
+		sendString("ready\r\n");
+
+		ulTaskNotifyTakeIndexed(HOSTIO_NOTIFICATION_DMA, pdTRUE, portMAX_DELAY);
+		disableDma();
+
+		xQueueSend(taskData.decoderQueue, &info, portMAX_DELAY);
 	}
 }
 
