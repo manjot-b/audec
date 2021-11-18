@@ -90,7 +90,7 @@ void hostIOSetup(void) {
 		usart.rx | usart.cts);
 
 	usart_disable(usart.number);
-	usart_set_baudrate(usart.number, 576000);
+	usart_set_baudrate(usart.number, 1500000);
 	usart_set_databits(usart.number, 8);
 	usart_set_stopbits(usart.number, 1);
 	usart_set_mode(usart.number, USART_MODE_TX_RX);
