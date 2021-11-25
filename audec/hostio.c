@@ -5,6 +5,8 @@
  * is full.
  */
 
+#include "hostio.h"
+
 #include <stdint.h>
 #include <string.h>
 
@@ -17,7 +19,6 @@
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/usart.h>
 
-#include "hostio.h"
 #include "buffers.h"
 #include "taskdata.h"
 

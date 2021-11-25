@@ -3,12 +3,13 @@
  * the output buffer.
  */
 
+#include "decoder.h"
+
 #include <stdint.h>
 
 #include <FreeRTOS.h>
 #include <queue.h>
 
-#include "decoder.h"
 #include "buffers.h"
 #include "taskdata.h"
 
