@@ -41,7 +41,11 @@ void decoderTask(void*) {
 
 	for(;;) {
 		xTaskNotifyGiveIndexed(taskData.hostIOHandle, HOSTIO_NOTIFICATION_DECODER);
+	
 		xQueueReceive(taskData.decoderQueue, &info, portMAX_DELAY);
+		ulTaskNotifyTakeIndexed(DECODER_NOTIFICATION_DAC, pdTRUE, portMAX_DELAY);
+
 		decode(&info);
+		xQueueSend(taskData.dacQueue, &info, portMAX_DELAY);
 	}
 }
