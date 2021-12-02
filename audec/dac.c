@@ -1,5 +1,7 @@
 #include "dac.h"
 
+#include <stdint.h>
+
 #include <FreeRTOS.h>
 
 #include <libopencm3/cm3/nvic.h>
@@ -13,7 +15,9 @@
 #define TIMER_FREQ (rcc_apb1_frequency * 2)
 
 /** The target frequency for the timer. */
-#define TIMER_TARGET_FREQ 100000
+#define TIMER_TARGET_FREQ 1000000
+
+static void sendToDac(const InfoPacket* info);
 
 void dacSetup(void) {
 	rcc_periph_clock_enable(RCC_TIM2);
@@ -27,7 +31,6 @@ void dacSetup(void) {
 	timer_set_prescaler(TIM2, (TIMER_FREQ / TIMER_TARGET_FREQ) - 1);
 	timer_enable_preload(TIM2);
 	timer_one_shot_mode(TIM2);
-	timer_set_period(TIM2, (TIMER_TARGET_FREQ / 2) - 1);
 	timer_update_on_overflow(TIM2);
 	timer_enable_update_event(TIM2);
 
@@ -47,6 +50,22 @@ void tim2_isr(void) {
 	}
 }
 
+/**
+ * Sends the audio data to the external DAC via SPI.
+ *
+ * @param info The info packet describing how to interpret the data in @c g_outputBuf.
+ */
+static void sendToDac(const InfoPacket* info) {
+	uint32_t period = TIMER_TARGET_FREQ / info->sampleRate;
+	timer_set_period(TIM2, period - 1);
+
+	int count = info->dataLength / (info->bitDepth / 8);
+	for(int i = 0; i < count; i += info->channels) {
+		timer_enable_counter(TIM2);
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+	}
+}
+
 void dacTask(void*) {
 	InfoPacket info;
 
@@ -54,7 +73,6 @@ void dacTask(void*) {
 		xTaskNotifyGiveIndexed(taskData.decoderHandle, DECODER_NOTIFICATION_DAC);
 
 		xQueueReceive(taskData.dacQueue, &info, portMAX_DELAY);
-		timer_enable_counter(TIM2);
-		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+		sendToDac(&info);
 	}
 }
