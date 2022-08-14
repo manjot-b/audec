@@ -5,6 +5,8 @@
  * is full.
  */
 
+#include "hostio.h"
+
 #include <stdint.h>
 #include <string.h>
 
@@ -17,7 +19,6 @@
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/usart.h>
 
-#include "hostio.h"
 #include "buffers.h"
 #include "taskdata.h"
 
@@ -90,7 +91,7 @@ void hostIOSetup(void) {
 		usart.rx | usart.cts);
 
 	usart_disable(usart.number);
-	usart_set_baudrate(usart.number, 1500000);
+	usart_set_baudrate(usart.number, 230400);
 	usart_set_databits(usart.number, 8);
 	usart_set_stopbits(usart.number, 1);
 	usart_set_mode(usart.number, USART_MODE_TX_RX);

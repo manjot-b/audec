@@ -10,11 +10,18 @@
  */
 typedef struct {
 	TaskHandle_t hostIOHandle;
+
 	TaskHandle_t decoderHandle;
 	QueueHandle_t decoderQueue;
+
+	TaskHandle_t dacHandle;
+	QueueHandle_t dacQueue;
 } TaskData;
 
 extern TaskData taskData;
+
+/** Indicates to the decoder that the DAC is ready */
+#define DECODER_NOTIFICATION_DAC 0
 
 /**
  * Notifications for the HostIO task.
