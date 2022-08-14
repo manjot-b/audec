@@ -115,13 +115,16 @@ void tim2_isr(void) {
 /**
  * Performs a blocking write to the DAC.
  *
- * @note Make sure that @c spi_enable() is called before this function.
+ * @note This functions enables and disables the spi before and after the
+ * write. For some reason disabling is required after each transfer.
  */
 static void mpcDACWrite(uint32_t spi, uint16_t data) {
+	spi_enable(spi);
 	while ( !(SPI_SR(spi) & SPI_SR_TXE) ) {
 		taskYIELD();
 	}
 	spi_write(spi, data);
+	disableSPI(spi);
 }
 
 /**
@@ -156,10 +159,10 @@ static void sendToDAC(const InfoPacket* info) {
 	uint32_t period = TIMER_TARGET_FREQ / info->sampleRate;
 	timer_set_period(TIM2, period - 1);
 
-	spi_enable(SPI1);
 	int count = info->dataLength / (info->bitDepth / 8);
 
 	for(int i = 0; i < count; i += info->channels) {
+		// Write to first channel
 		uint16_t command =
 			MCP_DAC_CRBIT_WRITE_A |
 			MCP_DAC_CRBIT_UNBUFFERED |
@@ -168,11 +171,19 @@ static void sendToDAC(const InfoPacket* info) {
 		command |= g_outputBuf[i];
 		mpcDACWrite(SPI1, command);
 
+		// Write to second channel
+		command =
+			MCP_DAC_CRBIT_WRITE_B |
+			MCP_DAC_CRBIT_UNBUFFERED |
+			MCP_DAC_CRBIT_GAIN_X1 |
+			MCP_DAC_CRBIT_ACTIVE;
+		if (info->channels > 1) { command |= g_outputBuf[i + 1]; }
+		else { command |= g_outputBuf[i]; }
+		mpcDACWrite(SPI1, command);
+
 		timer_enable_counter(TIM2);
 		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 	}
-	
-	disableSPI(SPI1);
 }
 
 void dacTask(void*) {

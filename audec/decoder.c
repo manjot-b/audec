@@ -14,13 +14,25 @@
 #include "taskdata.h"
 
 static void decode(const InfoPacket* info);
+static void decode8(const InfoPacket* info);
 static void decode16(const InfoPacket* info);
 
 static void decode(const InfoPacket* info) {
 	switch (info->bitDepth) {
+	case 8:
+		decode8(info); break;
 	case 16:
-		decode16(info);
-		break;
+		decode16(info); break;
+	}
+}
+
+static void decode8(const InfoPacket* info) {
+	for (size_t i = 0; i < info->dataLength; ++i) {
+		uint16_t pcm = g_inputBuf[i];
+
+		// Scale because of 12-bit DAC
+		pcm = pcm << 4;
+		g_outputBuf[i] = pcm;
 	}
 }
 
