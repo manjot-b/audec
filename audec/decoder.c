@@ -26,9 +26,10 @@ static void decode(const InfoPacket* info) {
 
 static void decode16(const InfoPacket* info) {
 	for (size_t inp = 0, out = 0; inp < info->dataLength; inp += 2, out++) {
-		int32_t spcm = g_inputBuf[inp] | (g_inputBuf[inp + 1] << 8);
-		spcm += 1 << 15;
-		uint16_t pcm = (uint16_t)spcm;
+		int16_t spcm = (g_inputBuf[inp + 1] << 8) | g_inputBuf[inp];
+		int32_t overflow = spcm;
+		overflow += 1 << 15;
+		uint16_t pcm = (uint16_t)overflow;
 
 		// Only a 12-bit DAC
 		pcm = pcm >> 4;
